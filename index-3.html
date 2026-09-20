@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#17382f">
+<title>MCFLY SHIFT</title>
+<style>
+:root{--green:#17382f;--cream:#f5efe4;--line:#d8d0c3;--ink:#222;--off:#efe6d6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+.top{background:var(--green);color:#fff;padding:9px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brand{font-weight:900;font-size:15px;letter-spacing:.7px}
+.meta{font-size:10px;opacity:.9;text-align:right}
+.wrap{padding:7px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px;gap:6px}
+.title{font-weight:800;font-size:12px}
+button{border:0;background:var(--green);color:white;border-radius:7px;padding:6px 9px;font-weight:700;font-size:10px}
+.scroller{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px;background:#fff}
+table{border-collapse:collapse;width:100%;min-width:640px;table-layout:fixed}
+th,td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;padding:3px 2px;height:31px;font-size:10px;white-space:nowrap}
+th{background:var(--green);color:#fff;font-size:9px;position:sticky;top:0;z-index:2}
+th:first-child,td:first-child{position:sticky;left:0;z-index:1;width:112px;text-align:left;padding-left:7px;font-weight:800}
+th:first-child{z-index:3}
+td:first-child{background:#fff}
+td.shift{font-weight:700}
+td.off{background:var(--off);font-weight:900;font-size:9px}
+.today{box-shadow:inset 2px 0 0 #987d4c,inset -2px 0 0 #987d4c}
+.status{font-size:9px;color:#666;margin-top:6px;text-align:center}
+@media(max-width:700px){
+ .wrap{padding:4px}.top{padding:7px 8px}.brand{font-size:13px}
+ table{min-width:600px}th,td{height:29px;font-size:9px}
+ th{font-size:8px}th:first-child,td:first-child{width:96px;padding-left:5px}
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand">MCFLY COFFEE CO. · SHIFT</div>
+  <div class="meta">MODA<br><span id="updated">Yükleniyor…</span></div>
+</div>
+<div class="wrap">
+  <div class="toolbar">
+    <div class="title">HAFTALIK PERSONEL VARDİYASI</div>
+    <button onclick="loadData()">YENİLE</button>
+  </div>
+  <div class="scroller">
+    <table id="shift"><thead></thead><tbody></tbody></table>
+  </div>
+  <div class="status" id="status">Google E-Tablo verileri yükleniyor…</div>
+</div>
+<script>
+const CSV="https://docs.google.com/spreadsheets/d/e/2PACX-1vQOQU__0Ct0CxnUGSBlfEhirw0gyKTbKv5cVeG61psriy2L-l6rHrJHD1YqLFUvl_Lp61crp0cPp0sT/pub?gid=0&single=true&output=csv";
+
+function parseCSV(text){
+ let rows=[], row=[], cell="", q=false;
+ for(let i=0;i<text.length;i++){
+   let c=text[i], n=text[i+1];
+   if(c=='"' && q && n=='"'){cell+='"';i++}
+   else if(c=='"'){q=!q}
+   else if(c==',' && !q){row.push(cell.trim());cell=""}
+   else if((c=='\n'||c=='\r') && !q){
+     if(c=='\r'&&n=='\n')i++;
+     row.push(cell.trim()); if(row.some(x=>x!=="")) rows.push(row);
+     row=[];cell="";
+   } else cell+=c;
+ }
+ if(cell||row.length){row.push(cell.trim());rows.push(row)}
+ return rows;
+}
+function isShift(v){return /\d{1,2}[:.]\d{2}\s*[-–]\s*\d{1,2}[:.]\d{2}/.test(v)}
+function scoreRow(r){
+ let s=0; for(let i=1;i<Math.min(r.length,9);i++) if(isShift(r[i])||/izin/i.test(r[i])) s++; return s;
+}
+function render(rows){
+ // Locate first personnel row automatically; use preceding row as header when useful.
+ let start=rows.findIndex(r=>scoreRow(r)>=2);
+ if(start<0) throw new Error("Vardiya satırları bulunamadı");
+ let data=rows.slice(start).filter(r=>scoreRow(r)>=1 || (r[0]&&r.slice(1,8).some(Boolean)));
+ let days=["PERSONEL","PZT","SALI","ÇAR","PER","CUMA","CMT","PAZ"];
+ let thead=document.querySelector("#shift thead"), tbody=document.querySelector("#shift tbody");
+ thead.innerHTML="<tr>"+days.map((d,i)=>`<th>${d}</th>`).join("")+"</tr>";
+ tbody.innerHTML="";
+ data.forEach(r=>{
+   let vals=r.slice(0,8); while(vals.length<8) vals.push("");
+   let tr=document.createElement("tr");
+   vals.forEach((v,i)=>{
+     let td=document.createElement("td"); td.textContent=v;
+     if(i>0 && isShift(v)) td.classList.add("shift");
+     if(i>0 && /izin/i.test(v)) td.classList.add("off");
+     tr.appendChild(td);
+   });
+   tbody.appendChild(tr);
+ });
+ document.getElementById("status").textContent=data.length+" personel gösteriliyor · Tablo sağa/sola kaydırılabilir";
+}
+async function loadData(){
+ const st=document.getElementById("status"); st.textContent="Güncelleniyor…";
+ try{
+   const res=await fetch(CSV+"&t="+Date.now(),{cache:"no-store"});
+   if(!res.ok) throw new Error("Veri alınamadı");
+   const text=await res.text(); render(parseCSV(text));
+   document.getElementById("updated").textContent="Son güncelleme "+new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+ }catch(e){
+   st.textContent="E-Tablo okunamadı. Google E-Tablo 'Web'de yayınla' açık olmalı.";
+ }
+}
+loadData(); setInterval(loadData,300000);
+</script>
+</body>
+</html>
